@@ -1,0 +1,59 @@
+########################################
+# General Configuration
+########################################
+
+aws_region   = "us-east-1"
+project_name = "multicloud-bootcamp"
+environment  = "dev"
+owner        = "your-name"
+cost_center  = "learning"
+
+########################################
+# VPC Configuration
+########################################
+
+vpc_cidr             = "10.0.0.0/16"
+enable_dns_hostnames = true
+enable_dns_support   = true
+
+########################################
+# Subnet Configuration
+########################################
+
+availability_zones      = ["us-east-1a", "us-east-1b"]
+public_subnet_cidrs     = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs    = ["10.0.11.0/24", "10.0.12.0/24"]
+database_subnet_cidrs   = ["10.0.21.0/24", "10.0.22.0/24"]
+map_public_ip_on_launch = true
+
+########################################
+# NAT Gateway Configuration
+########################################
+
+# Set to true for production (HA), false for dev (cost savings)
+enable_nat_gateway     = true
+single_nat_gateway     = false  # Set to true to use only 1 NAT Gateway (saves ~$32/month)
+one_nat_gateway_per_az = true   # Set to true for HA (recommended for production)
+
+########################################
+# VPC Flow Logs Configuration
+########################################
+
+enable_flow_logs           = true
+flow_logs_retention_days   = 7
+flow_logs_traffic_type     = "ALL"  # Options: ACCEPT, REJECT, ALL
+
+########################################
+# Additional Configuration
+########################################
+
+enable_vpn_gateway = false
+
+########################################
+# Additional Tags
+########################################
+
+tags = {
+  Team       = "DevOps"
+  Repository = "multicloud-bootcamp"
+}

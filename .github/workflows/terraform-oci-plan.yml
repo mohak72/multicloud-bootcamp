@@ -1,0 +1,191 @@
+name: Terraform Plan - OCI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'oci/**'
+      - '.github/workflows/terraform-oci-*.yml'
+
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Project directory to plan (e.g., 01-networking)'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: '1.6.0'
+  OCI_REGION: 'us-ashburn-1'
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest  # Change to 'self-hosted' for self-hosted runners
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Setup OCI CLI
+        run: |
+          # Install OCI CLI
+          bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- --accept-all-defaults
+
+          # Add to PATH
+          export PATH="$HOME/bin:$PATH"
+
+          # Create OCI config directory
+          mkdir -p ~/.oci
+
+          # Create OCI config from secrets
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ env.OCI_REGION }}
+          key_file=~/.oci/oci_api_key.pem
+          EOF
+
+          # Create private key from secret
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+
+          # Verify OCI CLI
+          oci --version
+
+      - name: Get Changed Directories
+        id: changed-dirs
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "directories=oci/${{ inputs.project }}" >> $GITHUB_OUTPUT
+          else
+            CHANGED_DIRS=$(git diff --name-only origin/main...HEAD | grep '^oci/' | cut -d'/' -f1-2 | sort -u)
+            echo "directories=${CHANGED_DIRS}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create terraform.tfvars
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              cat > $dir/terraform.tfvars << EOF
+          tenancy_ocid     = "${{ secrets.OCI_TENANCY_OCID }}"
+          user_ocid        = "${{ secrets.OCI_USER_OCID }}"
+          fingerprint      = "${{ secrets.OCI_FINGERPRINT }}"
+          private_key_path = "~/.oci/oci_api_key.pem"
+          compartment_ocid = "${{ secrets.OCI_COMPARTMENT_OCID }}"
+          region           = "${{ env.OCI_REGION }}"
+          EOF
+            fi
+          done
+
+      - name: Terraform Format Check
+        id: fmt
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -d "$dir" ]; then
+              echo "::group::Terraform Format Check - $dir"
+              cd $dir
+              terraform fmt -check -recursive || echo "::warning::Formatting issues found in $dir"
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Terraform Init
+        id: init
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Init - $dir"
+              cd $dir
+              terraform init -input=false
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Terraform Validate
+        id: validate
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Validate - $dir"
+              cd $dir
+              terraform validate -no-color
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Plan - $dir"
+              cd $dir
+              terraform plan -input=false -no-color -out=tfplan
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+        continue-on-error: true
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTPUT: ${{ steps.plan.outputs.stdout }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan Results - OCI 🚀
+
+            #### Terraform Format and Style 🖌️: \`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️: \`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖: \`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖: \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN_OUTPUT}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Cleanup Sensitive Files
+        if: always()
+        run: |
+          rm -rf ~/.oci
+          find . -name "terraform.tfvars" -type f -delete
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

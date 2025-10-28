@@ -1,0 +1,70 @@
+########################################
+# OCI Authentication
+# Get these values from: https://cloud.oracle.com/identity/users
+########################################
+
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+user_ocid        = "ocid1.user.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+fingerprint      = "xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+########################################
+# General Configuration
+########################################
+
+region       = "us-ashburn-1"  # Options: us-ashburn-1, us-phoenix-1, etc.
+project_name = "multicloud-bootcamp"
+environment  = "dev"
+owner        = "your-name"
+
+########################################
+# VCN Configuration
+########################################
+
+vcn_cidr      = "10.0.0.0/16"
+vcn_dns_label = "bootcampvcn"
+
+########################################
+# Subnet Configuration
+########################################
+
+public_subnet_cidrs   = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs  = ["10.0.11.0/24", "10.0.12.0/24"]
+database_subnet_cidrs = ["10.0.21.0/24", "10.0.22.0/24"]
+subnet_dns_label_prefix = "subnet"
+
+########################################
+# Gateway Configuration
+########################################
+
+enable_nat_gateway     = true
+enable_service_gateway = true
+block_nat_traffic      = false
+
+########################################
+# Security Configuration
+########################################
+
+allowed_ssh_cidrs   = ["0.0.0.0/0"]  # Restrict this in production!
+allowed_http_cidrs  = ["0.0.0.0/0"]
+allowed_https_cidrs = ["0.0.0.0/0"]
+
+########################################
+# Flow Logs Configuration
+########################################
+
+enable_flow_logs       = true
+flow_log_retention_days = 7
+
+########################################
+# Additional Tags
+########################################
+
+tags = {
+  Team       = "DevOps"
+  Repository = "multicloud-bootcamp"
+}
+
+# Defined tags (if you have tag namespaces configured)
+defined_tags = {}

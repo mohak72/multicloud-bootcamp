@@ -1,0 +1,117 @@
+name: Terraform Apply - AWS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'aws/**'
+      - '.github/workflows/terraform-aws-*.yml'
+
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Project directory to apply (e.g., 01-networking)'
+        required: true
+        type: string
+      auto_approve:
+        description: 'Auto-approve apply (use with caution!)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TF_VERSION: '1.6.0'
+  AWS_REGION: 'us-east-1'
+
+jobs:
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest  # Change to 'self-hosted' for self-hosted runners
+
+    environment:
+      name: aws-dev  # Requires approval in GitHub Settings
+
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Changed Directories
+        id: changed-dirs
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "directories=aws/${{ inputs.project }}" >> $GITHUB_OUTPUT
+          else
+            CHANGED_DIRS=$(git diff --name-only HEAD~1 HEAD | grep '^aws/' | cut -d'/' -f1-2 | sort -u)
+            echo "directories=${CHANGED_DIRS}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Init - $dir"
+              cd $dir
+              terraform init -input=false
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Terraform Plan
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Plan - $dir"
+              cd $dir
+              terraform plan -input=false -out=tfplan
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Terraform Apply
+        run: |
+          for dir in ${{ steps.changed-dirs.outputs.directories }}; do
+            if [ -f "$dir/main.tf" ]; then
+              echo "::group::Terraform Apply - $dir"
+              cd $dir
+              if [ "${{ inputs.auto_approve }}" == "true" ]; then
+                terraform apply -auto-approve tfplan
+              else
+                terraform apply tfplan
+              fi
+              cd -
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terraform-plan-aws
+          path: |
+            aws/**/tfplan
+            aws/**/.terraform.lock.hcl
+          retention-days: 7
