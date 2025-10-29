@@ -77,3 +77,9 @@ package-lock.json
 .pytest_cache/
 .coverage
 htmlcov/
+
+# BMAD and Claude Code local files
+.bmad-core/
+.bmad-infrastructure-devops/
+.claude/
+web-bundles/
